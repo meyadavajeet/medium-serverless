@@ -21,7 +21,7 @@ app.get(`/`, async (c) => {
   return c.text('Hello Hono! APP is UP and running !!!');
 })
 
-app.post(`${api_version}/signup`, async (c) => {
+app.post(`${api_version}/sign-up`, async (c) => {
   const prisma = new PrismaClient({
     datasourceUrl: c.env.DATABASE_URL,
   }).$extends(withAccelerate())
@@ -43,12 +43,25 @@ app.post(`${api_version}/signup`, async (c) => {
   } catch (error) {
     return c.status(403);
   }
-
-  return c.text('Signup route')
 });
 
-app.post(`${api_version}/signin`, (c) => {
-  return c.text('Signin route')
+app.post(`${api_version}/sign-in`, async (c) => {
+  const prisma = new PrismaClient({
+    datasourceUrl: c.env.DATABASE_URL,
+  }).$extends(withAccelerate());
+
+  const body = await c.req.json();
+  const user = await prisma.user.findUnique({
+    where: {
+      email: body.email
+    }
+  });
+  if (!user) {
+    c.status(403);
+    return c.json({ error: "user not found" });
+  }
+  const jwt = await sign({ id: user.id }, c.env.JWT_SECRET);
+  return c.json({ jwt });
 })
 
 
