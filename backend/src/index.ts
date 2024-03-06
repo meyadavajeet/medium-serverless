@@ -7,11 +7,30 @@ const app = new Hono<{
   Bindings: {
     DATABASE_URL: string,
     JWT_SECRET: string,
-
+  },
+  variables: {
+    userId: string,
   }
 }>();
 
-const api_version = "/api/v1";
+/**
+ * Middleware for the blog post routes
+ */
+app.use(`/api/v1/blog/*`, async (c, next) => {
+  const jwt = c.req.header('Authorization');
+  if (!jwt) {
+    c.status(401);
+    return c.json({ error: "unauthorized" });
+  }
+  const token = jwt.split(' ')[1];
+  const payload = await verify(token, c.env.JWT_SECRET);
+  if (!payload) {
+    c.status(401);
+    return c.json({ error: "unauthorized" });
+  }
+  // c.set('userId', payload.id);
+  await next();
+})
 
 
 app.get(`/`, async (c) => {
@@ -21,31 +40,45 @@ app.get(`/`, async (c) => {
   return c.text('Hello Hono! APP is UP and running !!!');
 })
 
-app.post(`${api_version}/sign-up`, async (c) => {
-  const prisma = new PrismaClient({
-    datasourceUrl: c.env.DATABASE_URL,
-  }).$extends(withAccelerate())
+app.post('/api/v1/sign-up', async (c) => {
+  console.log("sign-up route")
+  const prisma = new PrismaClient({ datasourceUrl: c.env.DATABASE_URL }).$extends(withAccelerate())
 
   // get body using hono
   const body = await c.req.json();
+  console.log(body);
+
   try {
-    const user = await prisma.user.create({
-      data: {
-        email: body.email,
-        password: body.password
+    const userExist = await prisma.user.findUnique({
+      where: {
+        email: body.email
       }
     });
+    if (!userExist) {
+      const user = await prisma.user.create({
+        data: {
+          email: body.email,
+          password: body.password
+        }
+      });
 
-    const token = sign({ id: user.id }, c.env.JWT_SECRET);
-    return c.json({
-      token: token
-    })
+      const token = await sign({ id: user.id }, c.env.JWT_SECRET);
+      return c.json({
+        token: token
+      })
+    } else {
+      c.status(422);
+      return c.json({ message: "User already registered!!!" })
+    }
+
   } catch (error) {
-    return c.status(403);
+    console.log("err", error);
+    c.status(500);
+    return c.json({ error: error })
   }
 });
 
-app.post(`${api_version}/sign-in`, async (c) => {
+app.post(`/api/v1/sign-in`, async (c) => {
   const prisma = new PrismaClient({
     datasourceUrl: c.env.DATABASE_URL,
   }).$extends(withAccelerate());
@@ -65,26 +98,26 @@ app.post(`${api_version}/sign-in`, async (c) => {
 })
 
 
-app.get(`${api_version}/blog`, (c) => {
+app.get(`/api/v1/blog`, (c) => {
   return c.text('blog route')
 })
 
 
-app.get(`${api_version}/blog/:id`, (c) => {
+app.get(`/api/v1/blog/:id`, (c) => {
   const id = c.req.param(`id`);
   console.log(id)
   return c.text('get blog by id route')
 })
 
-app.post(`${api_version}/blog`, (c) => {
+app.post(`/api/v1/blog`, (c) => {
   return c.text(`blog post route`)
 })
 
-app.put(`${api_version}/blog`, (c) => {
+app.put(`/api/v1/blog`, (c) => {
   return c.text(`blog update route`)
 })
 
-app.delete(`${api_version}/blog/:id`, (c) => {
+app.delete(`/api/v1/blog/:id`, (c) => {
   return c.text(`blog delete route`)
 })
 
